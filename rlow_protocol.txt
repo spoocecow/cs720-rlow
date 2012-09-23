@@ -1,0 +1,68 @@
+Mark Niemeyer
+CS 720  Assignment 4
+December 05, 2009
+
+Protocol design for rlow application suite
+------------------------------------------
+
+All packets transferred between the client and server follow this basic format:
+
+HEADER:	4 bytes, containing an unsigned int specifying length of DATA segment.
+TYPE:	1 byte, containing one of four ASCII character values:
+	'P':  PARAMS packet
+	'O':  OUTPUT packet
+	'E':  ERROR packet
+	'S':  STATS packet
+DATA:	Variable length data.
+
+A PARAMS packet can contain two possible types of data.  The first packet sent
+to the server by the client is a PARAMS packet, and contains 112 bytes of 
+parameters, with the following semantics (identical to "params" struct in
+low-netbase.h, minus the two long fd fields at the end, as those are used
+internally):
+bytes	0-3:	 unsigned int:  option flags
+	4-7:	 int:  maximum words to be read
+	8-11:	 int:  maximum directory depth
+	12-15:	 int:  maxmimum word length
+	16-19:	 int:  minimum word length
+	20-23:	 int:  maxmimum thread count
+	24-91:	 int[17]:  statistics as described in low-stats.h
+	92-95:   int:  current thread count (used internally)
+	96-99:   int:  processing time in seconds
+	100-103: int:  processing time, remaining microseconds
+	104-107: int:  proc.time / words found, seconds
+	108-111: int:  proc.time / words found, microseconds
+All values are in network endian order and must be converted to host order.
+
+The second packet sent to the server by the client is also a PARAMS packet,
+and contains the path of the item to be read by the server encoded as a C 
+string.
+
+Following the transmission of these two packets, the server may begin
+processing the passed item.  Both standard output and relevant error output are
+directed to the client, with 'O' and 'E' types respectively.  Data for these
+types is a C string of formatted output.
+
+At the end of processing, the server sends a packet of type STATS and data
+containing a params struct, this time with the statistics and processing times
+filled out appropriately.  Again, all values are in network format and must be
+converted.
+
+Once the server has sent its last OUTPUT/ERROR packet, or STATS if it has been
+requested, the connection is closed.
+
+Transmission overview:
+Client              Server
+  |                   |
+ [P]----------------->| [operational parameters]
+  |                   |
+ [P]----------------->| [path of entity to process]
+  |                   |
+  |<-----------------[O] [standard output, if any]
+  |<-----------------[E] [error output, if any]
+  |                   |
+  |<-----------------[S] [statistics, if requested by client]
+  |                   |
+done                 done
+
+/* vi: set autoindent tabstop=8 softtabstop=8 shiftwidth=8 noexpandtab : */
